@@ -36,6 +36,7 @@
 .bubble {
   padding: 6px 12px;
   border-radius: 10px;
+  user-select: text;
 
   .image {
     width: 100%;
@@ -44,6 +45,7 @@
 
 .sent {
   justify-content: flex-end;
+  user-select: text;
 
   .bubble {
     background-color: var(--violet-50);
@@ -54,6 +56,7 @@
 
 .received {
   justify-content: flex-start;
+  user-select: text;
 
   .bubble {
     background-color: var(--violet);
