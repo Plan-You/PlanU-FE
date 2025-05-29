@@ -21,7 +21,6 @@ const ParticipantsPicker: React.FC<props> = ({ creator, groupId }) => {
 
   useEffect(() => {
     if (groupId === "my" && friendList) {
-      console.log(groupId, friendList);
       const filteredMembersInfo = friendList.friends.map((friend) => ({
         name: friend.name,
         username: friend.username,
@@ -29,7 +28,6 @@ const ParticipantsPicker: React.FC<props> = ({ creator, groupId }) => {
       }));
       setMembers(filteredMembersInfo);
     } else if (groupId !== "my" && groupMemberList) {
-      console.log(groupId, groupMemberList.members);
 
       const filteredMembersInfo = groupMemberList.members.map((member) => ({
         name: member.name,
