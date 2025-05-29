@@ -64,4 +64,4 @@ const Map: React.FC<Props> = ({ latLng }) => {
   return <div className={styles.mapContainer} ref={mapRef} />;
 };
 
-export default React.memo(Map);
+export default Map;

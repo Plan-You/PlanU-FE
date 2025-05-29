@@ -43,7 +43,6 @@ const EditSchedulePage: React.FC = () => {
   const { mutate: editMySchedule } = usePostEditMySchedule(accessToken, scheduleId ?? "");
 
   const handleEditConfirmClick = () => {
-    console.log(groupId);
     const filteredMemberId: string[] = participants.map(
       (member: IScheduleMemberType) => member.username,
     );

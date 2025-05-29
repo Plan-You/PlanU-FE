@@ -13,6 +13,7 @@ import useUserLocation from "@store/useUserLocation";
 import { useGetGroupMembersLocationInfo } from "@api/location/getGroupMembersLocationInfo";
 import { useGetArrivalLocationInfo } from "@api/group/getArrivalLocationInfo";
 import type { IMessage } from "@stomp/stompjs";
+import { calculateDistance } from "@utils/calculateDistance";
 
 const LocationSharingPage = () => {
   const { groupId, scheduleId } = useParams<{ groupId: string; scheduleId: string }>();
@@ -30,6 +31,9 @@ const LocationSharingPage = () => {
   const userCurrentLatLng = useUserLocation();
   const [selectedUserName, setSelectedUserName] = useState<string>("");
 
+  const prevLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const { data: arrivalLocationInfo } = useGetArrivalLocationInfo(
     accessToken,
     groupId!,
@@ -43,10 +47,87 @@ const LocationSharingPage = () => {
   );
 
   useEffect(() => {
-    if (initialGroupMemberList && !groupMemberList) {
+    if (initialGroupMemberList && groupMemberList.length === 0) {
       setGroupMemberList(initialGroupMemberList.groupMemberLocations);
-    } 
-  }, [initialGroupMemberList]);
+    }
+  }, [initialGroupMemberList, groupMemberList]);
+
+  // 그룹 멤버들의 위치와 도착장소를 핀으로 보여줌
+  // 처음 맵의 중심은 자신의 현재 위치로 지정
+  useEffect(() => {
+    const initMap = async () => {
+      if (!userInfo || !mapRef.current || !arrivalLocationInfo) {
+        return;
+      }
+
+      const userLocation = groupMemberList.find((member) => member.username === userInfo.username);
+
+      if (!userLocation) {
+        console.error("User not found in group member list");
+        return;
+      }
+
+      try {
+        const newMap = await initializeMap(
+          mapRef.current,
+          { lat: userLocation.latitude, lng: userLocation.longitude },
+          import.meta.env.VITE_GOOGLE_MAP_ID,
+          15,
+        );
+
+        const pin = await createCustomPin({
+          scale: 2,
+          glyph: userInfo.profileImage,
+          type: "sharing",
+        });
+
+        const myPin = await createMarker(
+          newMap,
+          { lat: userLocation.latitude, lng: userLocation.longitude },
+          pin.element,
+        );
+        myPin.zIndex = 10;
+
+        setMap(newMap);
+
+        groupMemberList.forEach(async (member) => {
+          const memberPin = await createCustomPin({
+            scale: 2.0,
+            glyph: member.profileImage,
+            type: "sharing",
+          });
+          const memberMarker = await createMarker(
+            newMap,
+            { lat: member.latitude, lng: member.longitude },
+            memberPin.element,
+          );
+          markersRef.current.push(memberMarker);
+          memberMarker.zIndex = 1;
+        });
+
+        const arrivalPin = await createCustomPin({
+          scale: 2.5,
+          glyph: ArrivalPin,
+          type: "arrivalPin",
+        });
+
+        const arrivalMarker = await createMarker(
+          newMap,
+          {
+            lat: arrivalLocationInfo.groupScheduleLocation.latitude,
+            lng: arrivalLocationInfo.groupScheduleLocation.longitude,
+          },
+          arrivalPin.element,
+        );
+        arrivalMarker.zIndex = 20;
+      } catch (error) {
+        console.error("Error initializing map: ", error);
+      }
+    };
+    if (groupMemberList.length > 0) {
+      initMap();
+    }
+  }, [userInfo, groupMemberList, arrivalLocationInfo]);
 
   // 웹소켓 연결
   useEffect(() => {
@@ -54,7 +135,11 @@ const LocationSharingPage = () => {
       return;
     }
 
-    connectWebSocket(arrivalLocationInfo.groupScheduleLocation.startDateTime, arrivalLocationInfo.groupScheduleLocation.endDateTime, accessToken);
+    connectWebSocket(
+      arrivalLocationInfo.groupScheduleLocation.startDateTime,
+      arrivalLocationInfo.groupScheduleLocation.endDateTime,
+      accessToken,
+    );
   }, [accessToken, arrivalLocationInfo]);
 
   // 실시간 위치 정보 구독
@@ -89,9 +174,14 @@ const LocationSharingPage = () => {
 
               const nextMembers = [...updatedMembers, ...newMembers];
 
-              const isSame = prev.length === nextMembers.length && prev.every((member, i) => (
-                member.username === nextMembers[i].username && member.latitude === nextMembers[i].latitude && member.longitude === nextMembers[i].longitude
-              ))
+              const isSame =
+                prev.length === nextMembers.length &&
+                prev.every(
+                  (member, i) =>
+                    member.username === nextMembers[i].username &&
+                    member.latitude === nextMembers[i].latitude &&
+                    member.longitude === nextMembers[i].longitude,
+                );
 
               return isSame ? prev : nextMembers;
             });
@@ -106,24 +196,59 @@ const LocationSharingPage = () => {
     }
   }, [accessToken, groupId, scheduleId, isConnected]);
 
-  useEffect(() => {
-    // 현재 위치 및 변하는 위치 정보 감지 후 위치 변동 시 발행
-    if (!userCurrentLatLng || !groupId || !scheduleId || !accessToken) {
+ useEffect(() => {
+   if (
+     !userCurrentLatLng ||
+     !groupId ||
+     !scheduleId ||
+     !accessToken ||
+     !isConnected ||
+     !stompClient?.connected
+   ) {
+     return;
+   }
+
+    if (intervalRef.current) {
       return;
     }
-    const sendLocationUpdate = () => {
-      stompClient?.publish({
-        destination: `/pub/location/groups/${groupId}/${scheduleId}`,
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify(userCurrentLatLng),
-      });
-    };
-    if (stompClient && stompClient.connected && isConnected) {
-      sendLocationUpdate();
-    }
-  }, [isConnected, userCurrentLatLng, stompClient, groupId, scheduleId, accessToken]);
+
+   const DISTANCE_THRESHOLD = 5; // 5미터 이상 이동 시
+
+   intervalRef.current = setInterval(() => {
+     const prevLoc = prevLocationRef.current;
+     const currLoc = userCurrentLatLng;
+
+     const movedDistance = prevLoc
+       ? calculateDistance(
+           prevLoc.latitude,
+           prevLoc.longitude,
+           currLoc.latitude,
+           currLoc.longitude,
+         ) * 1000
+       : Infinity;
+
+     if (movedDistance >= DISTANCE_THRESHOLD) {
+       stompClient.publish({
+         destination: `/pub/location/groups/${groupId}/${scheduleId}`,
+         headers: {
+           Authorization: `Bearer ${accessToken}`,
+         },
+         body: JSON.stringify(currLoc),
+       });
+
+       prevLocationRef.current = currLoc;
+     }
+     // 5초마다 다시 확인
+   }, 5000);
+
+   return () => {
+     if (intervalRef.current) {
+       clearInterval(intervalRef.current);
+       intervalRef.current = null;
+     }
+   };
+ }, [isConnected, userCurrentLatLng, stompClient, groupId, scheduleId, accessToken]);
+
 
   // PC/데스크탑 버전 바텀시트
   const handleMouseMove = (e: MouseEvent) => {
@@ -202,94 +327,6 @@ const LocationSharingPage = () => {
     }
   };
 
-  // 그룹 멤버들의 위치와 도착장소를 핀으로 보여줌
-  // 처음 맵의 중심은 자신의 현재 위치로 지정
-  useEffect(() => {
-    const initMap = async () => {
-      if (!userInfo || !mapRef.current || !arrivalLocationInfo) {
-        return;
-      }
-
-      const userLocation = groupMemberList.find((member) => member.username === userInfo.username);
-
-      // if (!userLocation && userCurrentLatLng) {
-      //   console.warn("그룹 멤버 리스트에서 사용자 위치를 찾을 수 없어, 현재 위치를 사용합니다.");
-      //   userLocation = {
-      //     name: userInfo.name,
-      //     username: userInfo.username,
-      //     latitude: userCurrentLatLng.latitude,
-      //     longitude: userCurrentLatLng.longitude,
-      //     profileImage: userInfo.profileImage,
-      //   };
-      // }
-
-      if (!userLocation) {
-        console.error("User not found in group member list");
-        return;
-      }
-
-      try {
-        const newMap = await initializeMap(
-          mapRef.current,
-          { lat: userLocation.latitude, lng: userLocation.longitude },
-          import.meta.env.VITE_GOOGLE_MAP_ID,
-          15,
-        );
-
-        const pin = await createCustomPin({
-          scale: 2,
-          glyph: userInfo.profileImage,
-          type: "sharing",
-        });
-
-        const myPin = await createMarker(
-          newMap,
-          { lat: userLocation.latitude, lng: userLocation.longitude },
-          pin.element,
-        );
-        myPin.zIndex = 10;
-
-        setMap(newMap);
-
-        groupMemberList.forEach(async (member) => {
-          const memberPin = await createCustomPin({
-            scale: 2.0,
-            glyph: member.profileImage,
-            type: "sharing",
-          });
-          const memberMarker = await createMarker(
-            newMap,
-            { lat: member.latitude, lng: member.longitude },
-            memberPin.element,
-          );
-          markersRef.current.push(memberMarker);
-          memberMarker.zIndex = 1;
-        });
-
-        const arrivalPin = await createCustomPin({
-          scale: 2.5,
-          glyph: ArrivalPin,
-          type: "arrivalPin",
-        });
-
-        const arrivalMarker = await createMarker(
-          newMap,
-          {
-            lat: arrivalLocationInfo.groupScheduleLocation.latitude,
-            lng: arrivalLocationInfo.groupScheduleLocation.longitude,
-          },
-          arrivalPin.element,
-        );
-        arrivalMarker.zIndex = 20;
-      } catch (error) {
-        console.error("Error initializing map: ", error);
-      }
-    };
-    if (groupMemberList.length > 0) {
-      initMap();
-    }
-  }, [userInfo, groupMemberList, arrivalLocationInfo]);
-
   return (
     <>
       <LocationSharingRedirect />
@@ -315,7 +352,7 @@ const LocationSharingPage = () => {
           {groupMemberList.length !== 0 && arrivalLocationInfo ? (
             groupMemberList.map((groupMemberInfo, index) => (
               <GroupMemberItem
-                key={index+groupMemberInfo.username}
+                key={index + groupMemberInfo.username}
                 groupMemberItem={groupMemberInfo}
                 handleGroupMemberClick={() => {
                   handleGroupMemberClick(groupMemberInfo);

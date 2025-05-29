@@ -78,7 +78,7 @@ const SelectLocationPage = () => {
     };
 
     initMap();
-  }, [userLatLng]);
+  }, [userLatLng, mapRef.current]);
 
   useEffect(() => {
     if (!marker || !map) return;
