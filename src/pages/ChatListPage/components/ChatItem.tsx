@@ -1,8 +1,9 @@
 import ArrowIcon from "@assets/Icons/arrow/RightArrow.svg?react";
 import PinnedIcon from "@assets/Icons/chatt/pinned.svg?react";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import styles from "./chatItem.module.scss";
 import { useNavigate } from "react-router-dom";
+import { isSameDay } from "date-fns";
 
 interface ChatItemProps {
   chatRoom: IChatRoomResponseType;
@@ -10,6 +11,17 @@ interface ChatItemProps {
 
 const ChatItem: React.FC<ChatItemProps> = ({ chatRoom }) => {
   const navigate = useNavigate();
+  const [isToday, setIsToday] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (!chatRoom?.lastChatDate) return;
+
+    const chatDate = new Date(chatRoom.lastChatDate);
+    const today = new Date();
+
+    const isToday = isSameDay(chatDate, today);
+    setIsToday(isToday);
+  }, [chatRoom.lastChatDate]);
 
   const handleChatRoomClick = () => {
     navigate(`/group/${chatRoom.groupId}/chatting`);
@@ -28,11 +40,19 @@ const ChatItem: React.FC<ChatItemProps> = ({ chatRoom }) => {
             {chatRoom.groupName}
             {chatRoom.isPin && <PinnedIcon className={styles.pinnedIcon} />}
           </div>
-          <div className={styles.lastMessage}>{chatRoom.lastChat}</div>
+          <div className={styles.lastMessage}>
+            {chatRoom.lastChat.includes(
+              "https://planu-storage-main.s3.ap-northeast-2.amazonaws.com",
+            )
+              ? "사진을 보냈습니다."
+              : chatRoom.lastChat}
+          </div>
         </div>
         <div className={styles.timeInfo}>
           <div className={styles.topBox}>
-            <span className={styles.time}>{chatRoom.lastChatTime}</span>
+            <span className={styles.time}>
+              {isToday ? chatRoom.lastChatTime : chatRoom.lastChatDate}
+            </span>
             <ArrowIcon className={styles.arrowIcon} />
           </div>
           {chatRoom.unreadChats > 0 ? (

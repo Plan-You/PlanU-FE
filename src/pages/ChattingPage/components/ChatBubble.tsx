@@ -29,14 +29,12 @@ const ChatBubble: React.FC<Props> = ({ message, isSentByMe, type }) => {
       <div className={styles.MiddleContainer}>
         <div className={styles.bubble}>
           {type === 1 && (
-            <p className={`${isSentByMe ? styles.sentText : styles.receivedText}`}>
-              {message.message}
-            </p>
+            <p className={`${isSentByMe ? styles.sent : styles.received}`}>{message.message}</p>
           )}
           {type === 2 && (
             <img
               src={message.message}
-              className={`${styles.image} ${isSentByMe ? styles.sentText : styles.receivedText}`}
+              className={`${styles.image} ${isSentByMe ? styles.sent : styles.received}`}
             />
           )}
         </div>
