@@ -18,25 +18,25 @@ const MemberBox: React.FC<props> = ({ groupId = "" }) => {
   const { data: userInfoData } = useGetUserInfo(accessToken);
 
   useEffect(() => {
-    if (userInfoData && groupMemberList) {
-      const creator = groupMemberList?.members.find(
-        (member) => member.username === userInfoData?.username,
-      );
+    if (!userInfoData || !groupMemberList) return;
 
-      if (creator) {
-        setParticipants([
-          ...participants,
-          { name: creator.name, username: creator.username, profileImage: creator.profileImage },
-        ]);
-      }
-    }
-  }, []);
+    const creator = groupMemberList.members.find(
+      (member) => member.username === userInfoData.username,
+    );
 
-  useEffect(() => {
-    if (participants.length !== 0) {
-      setParticipants(participants);
+    const alreadyExists = participants.some((p) => p.username === creator?.username);
+
+    if (creator && !alreadyExists) {
+      setParticipants([
+        ...participants,
+        {
+          name: creator.name,
+          username: creator.username,
+          profileImage: creator.profileImage,
+        },
+      ]);
     }
-  }, [participants]);
+  }, [userInfoData, groupMemberList]);
 
   return (
     <div>
@@ -47,6 +47,7 @@ const MemberBox: React.FC<props> = ({ groupId = "" }) => {
         }}
         placeholder={participants.length === 0 ? "참석자" : ""}
         value={participants.length === 0 ? "" : participants.map((p) => p.name).join(", ")}
+        readOnly
       ></input>
       {isSelecting && (
         <div className={styles.isSelecting}>

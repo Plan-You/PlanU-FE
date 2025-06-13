@@ -1,6 +1,5 @@
 .bubbleContainer {
   display: flex;
-  align-items: end;
   max-width: 100%;
   gap: 5px;
 }
@@ -26,7 +25,9 @@
 .MiddleContainer {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 3px;
+  max-width: 80%;
 }
 
 .UnreadCount {
@@ -36,6 +37,8 @@
 .bubble {
   padding: 6px 12px;
   border-radius: 10px;
+  user-select: text;
+  word-break: break-word;
 
   .image {
     width: 100%;
@@ -44,39 +47,41 @@
 
 .sent {
   justify-content: flex-end;
+  user-select: text;
 
   .bubble {
     background-color: var(--violet-50);
     border-top-right-radius: 5px;
     align-items: flex-end;
   }
+
+  .MyTimeUnreadCountBox {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: flex-end;
+  }
 }
 
 .received {
-  justify-content: flex-start;
+  user-select: text;
+  display: flex;
 
   .bubble {
     background-color: var(--violet);
     border-top-left-radius: 5px;
     align-items: flex-end;
   }
+
+  .TimeUnreadCountBox {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    margin-top: auto;
+  }
 }
 
 .time {
   font-size: 11px;
   color: var(--gray-200);
-}
-
-.MyTimeUnreadCountBox {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
-
-.TimeUnreadCountBox {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: end;
-  height: 100%;
 }
